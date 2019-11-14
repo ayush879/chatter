@@ -4,15 +4,19 @@ import android.content.Context
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.widget.TableLayout
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentPagerAdapter
 import com.example.chatter.R
+import com.example.chatter.fragments.ChatterFragment
 import com.example.chatter.fragments.HomeFragment
 import com.example.chatter.fragments.MyActivityFragment
 import com.example.chatter.fragments.SearchFragment
+import com.example.chatter.listeners.HomeCallback
 import com.example.chatter.util.DATA_USERS
 import com.example.chatter.util.User
 import com.example.chatter.util.loadUrl
@@ -22,7 +26,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.android.synthetic.main.activity_home.*
 
-class HomeActivity : AppCompatActivity() {
+class HomeActivity : AppCompatActivity(), HomeCallback {
     private var sectionsPagerAdapter:SectionPageAdapter?=null
     private val firebaseAuth= FirebaseAuth.getInstance()
     private val firebaseDB=FirebaseFirestore.getInstance()
@@ -31,6 +35,7 @@ class HomeActivity : AppCompatActivity() {
     private val myActivityFragment=MyActivityFragment()
     private var userId=FirebaseAuth.getInstance().currentUser?.uid
     private  var user:User?=null
+    private var currentFragment:ChatterFragment=homeFragment
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_home)
@@ -48,14 +53,43 @@ class HomeActivity : AppCompatActivity() {
 
             }
 
-            override fun onTabSelected(p0: TabLayout.Tab?) {
-
+            override fun onTabSelected(tab: TabLayout.Tab?) {
+                when(tab?.position) {
+                   0 -> {
+                       titleBar.visibility=View.VISIBLE
+                       titleBar.text="Home"
+                       searchBar.visibility=View.GONE
+                       currentFragment=homeFragment
+                   }
+                    1 -> {
+                        titleBar.visibility=View.GONE
+                        searchBar.visibility=View.VISIBLE
+                        currentFragment=searchFragment
+                    }
+                    2 -> {
+                        titleBar.visibility=View.VISIBLE
+                        titleBar.text="My Activity"
+                        searchBar.visibility=View.GONE
+                        currentFragment=myActivityFragment
+                    }
+                }
             }
 
         })
         logo.setOnClickListener {view ->
             startActivity(ProfileActivity.newIntent(this))
+        }
 
+        fab.setOnClickListener {
+            startActivity(ChatActivity.newIntent(this,userId,user?.username))
+        }
+        homeProgressLayout.setOnTouchListener {v: View ,event: MotionEvent -> true }
+
+        search.setOnEditorActionListener {v,actionId,event ->
+            if(actionId==EditorInfo.IME_ACTION_DONE || actionId==EditorInfo.IME_ACTION_SEARCH) {
+                searchFragment.newHashtag(v?.text.toString())
+            }
+            true
         }
     }
 
@@ -63,12 +97,21 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        userId=FirebaseAuth.getInstance().currentUser?.uid
-        if(userId==null){
+        userId = FirebaseAuth.getInstance().currentUser?.uid
+        if (userId == null) {
             startActivity(LoginActivity.newIntent(this))
             finish()
+        } else {
+            populate()
         }
+    }
+
+    override fun onUserUpdated() {
         populate()
+    }
+
+    override fun onRefresh() {
+        currentFragment.updateList()
     }
     fun populate() {
         homeProgressLayout.visibility=View.VISIBLE
@@ -79,11 +122,18 @@ class HomeActivity : AppCompatActivity() {
                 user?.imageUrl?.let {
                     logo.loadUrl(it,R.drawable.logo)
                 }
+                updateFragmentUser()
             }
             .addOnFailureListener {e->
                 e.printStackTrace()
                 finish()
             }
+    }
+    fun updateFragmentUser() {
+        homeFragment.setUser(user)
+        searchFragment.setUser(user)
+        myActivityFragment.setUser(user)
+        currentFragment.updateList()
     }
 
     inner class SectionPageAdapter(fm:FragmentManager):FragmentPagerAdapter(fm) {
